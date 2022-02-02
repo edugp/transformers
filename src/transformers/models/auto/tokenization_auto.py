@@ -169,6 +169,7 @@ else:
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
+            ("data2vec", ("Wav2Vec2CTCTokenizer", None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("luke", ("LukeTokenizer", None)),

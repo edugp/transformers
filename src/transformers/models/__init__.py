@@ -113,6 +113,7 @@ from . import (
     vit,
     vit_mae,
     wav2vec2,
+    data2vec,
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,

@@ -68,6 +68,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("vit", "TFViTModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
+        ("data2vec", "TFData2VecModel"),
         ("hubert", "TFHubertModel"),
     ]
 )

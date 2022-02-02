@@ -49,6 +49,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "FlaxT5Model"),
         ("mt5", "FlaxMT5Model"),
         ("wav2vec2", "FlaxWav2Vec2Model"),
+        ("data2vec", "FlaxData2VecModel"),
         ("marian", "FlaxMarianModel"),
         ("blenderbot", "FlaxBlenderbotModel"),
         ("roformer", "FlaxRoFormerModel"),
@@ -68,6 +69,7 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("t5", "FlaxT5ForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
         ("wav2vec2", "FlaxWav2Vec2ForPreTraining"),
+        ("data2vec", "FlaxData2VecForPreTraining"),
         ("roformer", "FlaxRoFormerForMaskedLM"),
     ]
 )
