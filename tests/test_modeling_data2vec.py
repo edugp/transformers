@@ -42,13 +42,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2FeatureExtractor,
         Data2VecForAudioFrameClassification,
         Data2VecForCTC,
         Data2VecForPreTraining,
         Data2VecForSequenceClassification,
         Data2VecForXVector,
         Data2VecModel,
+        Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
     )
     from transformers.models.data2vec.modeling_data2vec import (
