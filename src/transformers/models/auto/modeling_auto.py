@@ -57,6 +57,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextModel"),
         ("vit", "ViTModel"),
         ("wav2vec2", "Wav2Vec2Model"),
+        ("data2vec", "Data2VecModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("wavlm", "WavLMModel"),
         ("unispeech", "UniSpeechModel"),
@@ -151,6 +152,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
+        ("data2vec", "Data2VecForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("unispeech", "UniSpeechForPreTraining"),
     ]
@@ -171,6 +173,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForMaskedLM"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
+        ("data2vec", "Data2VecForMaskedLM"),
         ("m2m_100", "M2M100ForConditionalGeneration"),
         ("convbert", "ConvBertForMaskedLM"),
         ("led", "LEDForConditionalGeneration"),
@@ -301,6 +304,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerForMaskedLM"),
         ("big_bird", "BigBirdForMaskedLM"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
+        ("data2vec", "Data2VecForMaskedLM"),
         ("convbert", "ConvBertForMaskedLM"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("distilbert", "DistilBertForMaskedLM"),
@@ -550,6 +554,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
+        ("data2vec", "Data2VecForSequenceClassification"),
         ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
         ("unispeech", "UniSpeechForSequenceClassification"),
         ("hubert", "HubertForSequenceClassification"),
@@ -563,6 +568,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
     [
         # Model for Connectionist temporal classification (CTC) mapping
         ("wav2vec2", "Wav2Vec2ForCTC"),
+        ("data2vec", "Data2VecForCTC"),
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("unispeech", "UniSpeechForCTC"),
         ("hubert", "HubertForCTC"),
@@ -576,6 +582,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
+        ("data2vec", "Data2VecForAudioFrameClassification"),
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wavlm", "WavLMForAudioFrameClassification"),
     ]
@@ -585,6 +592,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
     [
         # Model for Audio Classification mapping
         ("wav2vec2", "Wav2Vec2ForXVector"),
+        ("data2vec", "Data2VecForXVector"),
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wavlm", "WavLMForXVector"),
     ]

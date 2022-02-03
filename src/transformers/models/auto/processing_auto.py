@@ -42,6 +42,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("trocr", "TrOCRProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
+        ("data2vec", "Data2VecProcessor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
     ]
