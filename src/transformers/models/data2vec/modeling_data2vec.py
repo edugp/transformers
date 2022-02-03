@@ -45,6 +45,8 @@ from ...modeling_utils import PreTrainedModel, torch_int_div
 from ...utils import logging
 from .configuration_data2vec import Data2VecConfig
 
+from ...models.roberta.modeling_roberta import RobertaEmbeddings
+
 
 logger = logging.get_logger(__name__)
 
@@ -53,7 +55,7 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
+_PROCESSOR_FOR_DOC = "Data2VecProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "data2vec"
@@ -64,7 +66,7 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
+_FEAT_EXTRACTOR_FOR_DOC = "Data2VecFeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "superb/data2vec-base-superb-ks"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 6.54
@@ -82,7 +84,6 @@ DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "data2vec",
     # See all data2vec models at https://huggingface.co/models?filter=data2vec
 ]
-
 
 
 @dataclass
@@ -523,8 +524,35 @@ class Data2VecFeatureEncoder(nn.Module):
         return hidden_states
 
 
+class Data2VecAudioPreprocessor(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.feature_encoder = Data2VecFeatureEncoder(config)
+        self.feature_projector = Data2VecFeatureProjection(config)
+        self.pos_conv_embed = Data2VecPositionalConvEmbedding(config)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout)
+
+    def forward(self, input_values):
+        super().__init(self)
+        # Extract raw audio features
+        extract_features = self.feature_extractor(input_values)
+        extract_features = extract_features.transpose(1, 2)
+
+        # Project raw features
+        hidden_states, extract_features = self.feature_projection(extract_features)
+
+        # Add positional embeddings
+        positional_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + positional_embeddings
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states, extract_features # This goes into the encoder
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->Data2Vec,Wav2Vec2FeatureExtractor->Wav2Vec2FeatureExtractor
-class Wav2Vec2FeatureExtractor(Data2VecFeatureEncoder):
+class Data2VecFeatureExtractor(Data2VecFeatureEncoder):
     def __init__(self, config):
         super().__init__(config)
         warnings.warn(
@@ -574,7 +602,7 @@ class Data2VecAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -789,14 +817,10 @@ class Data2VecEncoderLayerStableLayerNorm(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Encoder with Wav2Vec2->Data2Vec
 class Data2VecEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.pos_conv_embed = Data2VecPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Data2VecEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -821,10 +845,7 @@ class Data2VecEncoder(nn.Module):
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        # Positional embeddings have already been added
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -1214,8 +1235,8 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            soundfile*). To prepare the array into *input_values*, the [`Data2VecProcessor`] should be used for padding
+            and conversion into a tensor of type *torch.FloatTensor*. See [`Data2VecProcessor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1253,11 +1274,18 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->Data2Vec,WAV_2_VEC_2->DATA2VEC
 class Data2VecModel(Data2VecPreTrainedModel):
-    def __init__(self, config: Data2VecConfig):
+    def __init__(self, config: Data2VecConfig, data_type: str="audio"):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = Data2VecFeatureEncoder(config)
-        self.feature_projection = Data2VecFeatureProjection(config)
+        assert data_type in {"audio", "text", "image"}
+        if data_type == "audio":
+            self.feature_preprocessor = Data2VecAudioPreprocessor(config)
+        elif data_type == "text":
+            # TODO: Create text preprocessor
+            pass
+        else:
+            # TODO: Create image preprocessor
+            pass
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
@@ -1292,52 +1320,6 @@ class Data2VecModel(Data2VecPreTrainedModel):
         """
         self.feature_extractor._freeze_parameters()
 
-    def _mask_hidden_states(
-        self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return hidden_states
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, sequence_length, hidden_size = hidden_states.size()
-
-        if mask_time_indices is not None:
-            # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-        elif self.config.mask_time_prob > 0 and self.training:
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
-            hidden_states[mask_feature_indices] = 0
-
-        return hidden_states
-
     @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
@@ -1362,22 +1344,21 @@ class Data2VecModel(Data2VecPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = self.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
-
+        # Run audio/text/image preprocessor
+        preprocessed_embeddings, extract_features = self.feature_preprocessor(input_values)
+    
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
                 extract_features.shape[1], attention_mask, add_adapter=False
             )
 
-        hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+            preprocessed_embeddings, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
 
         encoder_outputs = self.encoder(
-            hidden_states,
+            preprocessed_embeddings,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1489,12 +1470,12 @@ class Data2VecForPreTraining(Data2VecPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import Wav2Vec2FeatureExtractor, Data2VecForPreTraining
+        >>> from transformers import Data2VecFeatureExtractor, Data2VecForPreTraining
         >>> from transformers.models.data2vec.modeling_data2vec import _compute_mask_indices
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("patrickvonplaten/data2vec-base")
+        >>> feature_extractor = Data2VecFeatureExtractor.from_pretrained("patrickvonplaten/data2vec-base")
         >>> model = Data2VecForPreTraining.from_pretrained("patrickvonplaten/data2vec-base")
 
 
