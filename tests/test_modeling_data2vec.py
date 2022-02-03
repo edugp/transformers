@@ -45,7 +45,6 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Data2VecForAudioFrameClassification,
         Data2VecForCTC,
-        Data2VecForMaskedLM,
         Data2VecForPreTraining,
         Data2VecForSequenceClassification,
         Data2VecForXVector,
@@ -391,7 +390,7 @@ class Data2VecModelTester:
 @require_torch
 class Data2VecModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Data2VecForCTC, Data2VecModel, Data2VecForMaskedLM, Data2VecForSequenceClassification, Data2VecForPreTraining)
+        (Data2VecForCTC, Data2VecModel, Data2VecForSequenceClassification, Data2VecForPreTraining)
         if is_torch_available()
         else ()
     )
@@ -621,7 +620,6 @@ class Data2VecRobustModelTest(ModelTesterMixin, unittest.TestCase):
         (
             Data2VecForCTC,
             Data2VecModel,
-            Data2VecForMaskedLM,
             Data2VecForSequenceClassification,
             Data2VecForPreTraining,
             Data2VecForAudioFrameClassification,
