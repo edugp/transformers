@@ -25,7 +25,6 @@ DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Data2VecConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecModel`]. It is used to instantiate an

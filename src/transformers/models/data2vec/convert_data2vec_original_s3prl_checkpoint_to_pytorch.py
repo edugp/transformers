@@ -21,10 +21,10 @@ import torch
 
 from transformers import (
     Data2VecConfig,
-    Wav2Vec2FeatureExtractor,
     Data2VecForAudioFrameClassification,
     Data2VecForSequenceClassification,
     Data2VecForXVector,
+    Wav2Vec2FeatureExtractor,
     logging,
 )
 

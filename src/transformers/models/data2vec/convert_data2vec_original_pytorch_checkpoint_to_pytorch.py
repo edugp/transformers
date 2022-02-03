@@ -25,10 +25,10 @@ from fairseq.data import Dictionary
 
 from transformers import (
     Data2VecConfig,
-    Wav2Vec2CTCTokenizer,
-    Wav2Vec2FeatureExtractor,
     Data2VecForCTC,
     Data2VecForPreTraining,
+    Wav2Vec2CTCTokenizer,
+    Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
     logging,
 )

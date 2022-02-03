@@ -326,9 +326,6 @@ _import_structure = {
     "models.data2vec": [
         "DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Data2VecConfig",
-       
-       
-       
         "Data2VecTokenizer",
     ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
@@ -2424,6 +2421,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.data2vec import DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecConfig, Data2VecTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
@@ -2523,14 +2521,6 @@ if TYPE_CHECKING:
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
-    )
-    from .models.data2vec import (
-        DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Data2VecConfig,
-       
-       
-       
-        Data2VecTokenizer,
     )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
@@ -2966,6 +2956,16 @@ if TYPE_CHECKING:
             CTRLLMHeadModel,
             CTRLModel,
             CTRLPreTrainedModel,
+        )
+        from .models.data2vec import (
+            DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecForAudioFrameClassification,
+            Data2VecForCTC,
+            Data2VecForPreTraining,
+            Data2VecForSequenceClassification,
+            Data2VecForXVector,
+            Data2VecModel,
+            Data2VecPreTrainedModel,
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3470,16 +3470,6 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
-        )
-        from .models.data2vec import (
-            DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecForAudioFrameClassification,
-            Data2VecForCTC,
-            Data2VecForPreTraining,
-            Data2VecForSequenceClassification,
-            Data2VecForXVector,
-            Data2VecModel,
-            Data2VecPreTrainedModel,
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,
