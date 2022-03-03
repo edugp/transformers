@@ -169,6 +169,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "VisualBertForMultipleChoice",
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
+    "MaskFormerForInstanceSegmentation",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -226,6 +227,7 @@ def get_model_modules():
         "modeling_flax_encoder_decoder",
         "modeling_flax_utils",
         "modeling_speech_encoder_decoder",
+        "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
@@ -301,6 +303,7 @@ def get_model_test_files():
         "test_modeling_common",
         "test_modeling_encoder_decoder",
         "test_modeling_flax_encoder_decoder",
+        "test_modeling_flax_speech_encoder_decoder",
         "test_modeling_marian",
         "test_modeling_tf_common",
         "test_modeling_tf_encoder_decoder",

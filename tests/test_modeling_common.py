@@ -1496,9 +1496,8 @@ class ModelTesterMixin:
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=tf_inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model).to(torch_device)
 
-            # need to rename encoder-decoder "inputs" for PyTorch
-            #            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
-            #                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+            # Make sure PyTorch tensors are on same device as model
+            pt_inputs = {k: v.to(torch_device) if torch.is_tensor(v) else v for k, v in pt_inputs.items()}
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs)
@@ -1874,7 +1873,10 @@ class ModelTesterMixin:
         ]
 
         for model_class in self.all_model_classes:
-            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            if model_class not in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            ]:
                 continue
 
             for problem_type in problem_types:
