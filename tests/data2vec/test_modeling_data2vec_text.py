@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,41 +12,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+""" Testing suite for the PyTorch Data2VecAudio model. """
 
 import unittest
-from copy import deepcopy
 
-from transformers import Data2VecConfig, is_torch_available
+from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from transformers import Data2VecTextConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ..generation.test_generation_utils import GenerationTesterMixin
+from ..test_configuration_common import ConfigTester
+from ..test_modeling_common import ModelTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        Data2VecForCausalLM,
-        Data2VecForMaskedLM,
-        Data2VecForMultipleChoice,
-        Data2VecForQuestionAnswering,
-        Data2VecForSequenceClassification,
-        Data2VecForTokenClassification,
-        Data2VecModel,
+        Data2VecTextForCausalLM,
+        Data2VecTextForMaskedLM,
+        Data2VecTextForMultipleChoice,
+        Data2VecTextForQuestionAnswering,
+        Data2VecTextForSequenceClassification,
+        Data2VecTextForTokenClassification,
+        Data2VecTextModel,
     )
-    from transformers.models.data2vec.modeling_data2vec import (
-        DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-        Data2VecEmbeddings,
+    from transformers.models.data2vec.modeling_data2vec_text import (
+        DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        Data2VecTextForTextEmbeddings,
         create_position_ids_from_input_ids,
     )
 
-DATA2VEC_TINY = "sshleifer/tiny-distildata2vec"
 
-
-class Data2VecModelTester:
+class Data2VecTextModelTester:
     def __init__(
         self,
         parent,
@@ -98,7 +96,7 @@ class Data2VecModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return Data2VecConfig(
+        return Data2VecTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -142,7 +140,7 @@ class Data2VecModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = Data2VecModel(config=config)
+        model = Data2VecTextModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -165,7 +163,7 @@ class Data2VecModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = Data2VecModel(config)
+        model = Data2VecTextModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -197,7 +195,7 @@ class Data2VecModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = Data2VecForCausalLM(config=config)
+        model = Data2VecTextForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -217,7 +215,7 @@ class Data2VecModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = Data2VecForCausalLM(config=config).to(torch_device).eval()
+        model = Data2VecTextForCausalLM(config=config).to(torch_device).eval()
 
         # make sure that ids don't start with pad token
         mask = input_ids.ne(config.pad_token_id).long()
@@ -274,7 +272,7 @@ class Data2VecModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = Data2VecForMaskedLM(config=config)
+        model = Data2VecTextForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -284,7 +282,7 @@ class Data2VecModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = Data2VecForTokenClassification(config=config)
+        model = Data2VecTextForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -294,7 +292,7 @@ class Data2VecModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = Data2VecForMultipleChoice(config=config)
+        model = Data2VecTextForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -311,7 +309,7 @@ class Data2VecModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = Data2VecForQuestionAnswering(config=config)
+        model = Data2VecTextForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -340,26 +338,25 @@ class Data2VecModelTester:
 
 
 @require_torch
-class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            Data2VecForCausalLM,
-            Data2VecForMaskedLM,
-            Data2VecModel,
-            Data2VecForSequenceClassification,
-            Data2VecForTokenClassification,
-            Data2VecForMultipleChoice,
-            Data2VecForQuestionAnswering,
+            Data2VecTextForCausalLM,
+            Data2VecTextForMaskedLM,
+            Data2VecTextModel,
+            Data2VecTextForSequenceClassification,
+            Data2VecTextForTokenClassification,
+            Data2VecTextForMultipleChoice,
+            Data2VecTextForQuestionAnswering,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Data2VecForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = Data2VecModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecConfig, hidden_size=37)
+        self.model_tester = Data2VecTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -432,8 +429,8 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Data2VecModel.from_pretrained(model_name)
+        for model_name in DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = Data2VecTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
@@ -441,10 +438,10 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is Data2VecEmbeddings.padding_idx + 1
+        first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = Data2VecEmbeddings(config=config)
+        model = Data2VecTextForTextEmbeddings(config=config)
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
@@ -460,10 +457,10 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is Data2VecEmbeddings.padding_idx + 1
+        first available non-padding position index is Data2VecTextForTextEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        embeddings = Data2VecEmbeddings(config=config)
+        embeddings = Data2VecTextForTextEmbeddings(config=config)
 
         inputs_embeds = torch.empty(2, 4, 30)
         expected_single_positions = [
@@ -479,10 +476,10 @@ class Data2VecModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 
 @require_torch
-class Data2VecModelIntegrationTest(TestCasePlus):
+class Data2VecTextModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = Data2VecForMaskedLM.from_pretrained("data2vec")
+        model = Data2VecTextForMaskedLM.from_pretrained("facebook/data2vec-text-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
@@ -490,67 +487,20 @@ class Data2VecModelIntegrationTest(TestCasePlus):
         expected_shape = torch.Size((1, 11, 50265))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
-        expected_slice = torch.tensor(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
-        )
-
-        # data2vec = torch.hub.load('pytorch/fairseq', 'data2vec.base')
-        # data2vec.eval()
-        # expected_slice = data2vec.model.forward(input_ids)[0][:, :3, :3].detach()
+        expected_slice = torch.tensor([[[0.2328, 0.0000, 1.1710], [2.2525, 0.0000, 1.9937], [2.1280, 0.0000, 1.8691]]])
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_no_head(self):
-        model = Data2VecModel.from_pretrained("data2vec")
+        model = Data2VecTextModel.from_pretrained("facebook/data2vec-text-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
             output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
+            [[[0.1998, -0.0379, 0.0024], [-0.0971, -0.2214, -0.1798], [-0.0789, -0.2400, -0.1898]]]
         )
 
-        # data2vec = torch.hub.load('pytorch/fairseq', 'data2vec.base')
-        # data2vec.eval()
-        # expected_slice = data2vec.extract_features(input_ids)[:, :3, :3].detach()
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_classification_head(self):
-        model = Data2VecForSequenceClassification.from_pretrained("data2vec-large-mnli")
-
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        with torch.no_grad():
-            output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 3))
-        self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
-
-        # data2vec = torch.hub.load('pytorch/fairseq', 'data2vec.large.mnli')
-        # data2vec.eval()
-        # expected_tensor = data2vec.predict("mnli", input_ids, return_logits=True).detach()
-
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
-
-    # XXX: this might be a candidate for common tests if we have many of those
-    def test_lm_head_ignore_keys(self):
-        keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-        keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = Data2VecConfig.from_pretrained(DATA2VEC_TINY)
-        config_tied = deepcopy(config)
-        config_tied.tie_word_embeddings = True
-        config_untied = deepcopy(config)
-        config_untied.tie_word_embeddings = False
-        for cls in [Data2VecForMaskedLM, Data2VecForCausalLM]:
-            model = cls(config_tied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
-
-            # the keys should be different when embeddings aren't tied
-            model = cls(config_untied)
-            self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_untied, cls)
-
-            # test that saving works with updated ignore keys - just testing that it doesn't fail
-            model.save_pretrained(self.get_auto_remove_tmp_dir())

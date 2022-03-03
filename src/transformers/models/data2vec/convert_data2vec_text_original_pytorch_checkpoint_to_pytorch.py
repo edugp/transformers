@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecConfig, Data2VecForMaskedLM, Data2VecForSequenceClassification
+from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -32,8 +32,11 @@ from transformers.models.bert.modeling_bert import (
     BertSelfAttention,
     BertSelfOutput,
 )
+
+# IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
+# File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
+from transformers.models.data2vec.data2vec_text import Data2VecTextModel
 from transformers.utils import logging
-from .data2vec_text import Data2VecTextModel
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -53,11 +56,13 @@ def convert_data2vec_checkpoint_to_pytorch(
     Copy/paste/tweak data2vec's weights to our BERT structure.
     """
     data2vec_checkpoint_dir, data2vec_checkpoint_file_name = os.path.split(data2vec_checkpoint_path)
-    data2vec = Data2VecTextModel.from_pretrained(data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name)
+    data2vec = Data2VecTextModel.from_pretrained(
+        data2vec_checkpoint_dir, checkpoint_file=data2vec_checkpoint_file_name
+    )
     data2vec.eval()  # disable dropout
     data2vec_model = data2vec.models[0]
     data2vec_sent_encoder = data2vec_model.encoder.sentence_encoder
-    config = Data2VecConfig(
+    config = Data2VecTextConfig(
         vocab_size=data2vec_sent_encoder.embed_tokens.num_embeddings,
         hidden_size=data2vec_model.args.encoder_embed_dim,
         num_hidden_layers=data2vec_model.args.encoder_layers,
@@ -71,32 +76,35 @@ def convert_data2vec_checkpoint_to_pytorch(
         config.num_labels = data2vec.model.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = Data2VecForSequenceClassification(config) if classification_head else Data2VecForMaskedLM(config)
+    model = Data2VecTextForSequenceClassification(config) if classification_head else Data2VecTextForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
     # Embeddings
-    model.data2vec.embeddings.word_embeddings.weight = data2vec_sent_encoder.embed_tokens.weight
-    model.data2vec.embeddings.position_embeddings.weight = data2vec_sent_encoder.embed_positions.weight
-    model.data2vec.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
-        model.data2vec.embeddings.token_type_embeddings.weight
+    model.data2vec_text.embeddings.word_embeddings.weight = data2vec_sent_encoder.embed_tokens.weight
+    model.data2vec_text.embeddings.position_embeddings.weight = data2vec_sent_encoder.embed_positions.weight
+    model.data2vec_text.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
+        model.data2vec_text.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c data2vec doesn't use them.
-    model.data2vec.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
-    model.data2vec.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
+    model.data2vec_text.embeddings.LayerNorm.weight = data2vec_sent_encoder.layernorm_embedding.weight
+    model.data2vec_text.embeddings.LayerNorm.bias = data2vec_sent_encoder.layernorm_embedding.bias
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
-        layer: BertLayer = model.data2vec.encoder.layer[i]
+        layer: BertLayer = model.data2vec_text.encoder.layer[i]
         data2vec_layer: TransformerSentenceEncoderLayer = data2vec_sent_encoder.layers[i]
 
         # self attention
         self_attn: BertSelfAttention = layer.attention.self
-        assert (
-            data2vec_layer.self_attn.k_proj.weight.data.shape
-            == data2vec_layer.self_attn.q_proj.weight.data.shape
-            == data2vec_layer.self_attn.v_proj.weight.data.shape
-            == torch.Size((config.hidden_size, config.hidden_size))
-        )
+        assert data2vec_layer.self_attn.k_proj.weight.data.shape == torch.Size(
+            (config.hidden_size, config.hidden_size)
+        ), f"Shape for data2vec_layer.self_attn.k_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
+        assert data2vec_layer.self_attn.q_proj.weight.data.shape == torch.Size(
+            (config.hidden_size, config.hidden_size)
+        ), f"Shape for data2vec_layer.self_attn.q_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
+        assert data2vec_layer.self_attn.v_proj.weight.data.shape == torch.Size(
+            (config.hidden_size, config.hidden_size)
+        ), f"Shape for data2vec_layer.self_attn.v_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
 
         self_attn.query.weight.data = data2vec_layer.self_attn.q_proj.weight
         self_attn.query.bias.data = data2vec_layer.self_attn.q_proj.bias
@@ -107,7 +115,9 @@ def convert_data2vec_checkpoint_to_pytorch(
 
         # self-attention output
         self_output: BertSelfOutput = layer.attention.output
-        assert self_output.dense.weight.shape == data2vec_layer.self_attn.out_proj.weight.shape
+        assert (
+            self_output.dense.weight.shape == data2vec_layer.self_attn.out_proj.weight.shape
+        ), f"Shape for self_output.dense.weight should be {data2vec_layer.self_attn.out_proj.weight.shape}"
         self_output.dense.weight = data2vec_layer.self_attn.out_proj.weight
         self_output.dense.bias = data2vec_layer.self_attn.out_proj.bias
         self_output.LayerNorm.weight = data2vec_layer.self_attn_layer_norm.weight
@@ -115,13 +125,17 @@ def convert_data2vec_checkpoint_to_pytorch(
 
         # intermediate
         intermediate: BertIntermediate = layer.intermediate
-        assert intermediate.dense.weight.shape == data2vec_layer.fc1.weight.shape
+        assert (
+            intermediate.dense.weight.shape == data2vec_layer.fc1.weight.shape
+        ), f"Shape for intermediate.dense.weight should be {data2vec_layer.fc1.weight.shape}"
         intermediate.dense.weight = data2vec_layer.fc1.weight
         intermediate.dense.bias = data2vec_layer.fc1.bias
 
         # output
         bert_output: BertOutput = layer.output
-        assert bert_output.dense.weight.shape == data2vec_layer.fc2.weight.shape
+        assert (
+            bert_output.dense.weight.shape == data2vec_layer.fc2.weight.shape
+        ), f"Shape for bert_output.dense.weight should be {data2vec_layer.fc2.weight.shape}"
         bert_output.dense.weight = data2vec_layer.fc2.weight
         bert_output.dense.bias = data2vec_layer.fc2.bias
         bert_output.LayerNorm.weight = data2vec_layer.final_layer_norm.weight
@@ -167,7 +181,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--data2vec_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
@@ -177,5 +191,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_data2vec_checkpoint_to_pytorch(
-        args.data2vec_checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
     )

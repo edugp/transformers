@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,42 +12,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch UniSpeech model. """
+""" Testing suite for the PyTorch Data2VecAudio model. """
 
 import math
 import unittest
 
 import numpy as np
-import pytest
 from datasets import load_dataset
 
-from transformers import UniSpeechConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+from transformers import Data2VecAudioConfig, is_torch_available
+from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile, require_torch, slow, torch_device
 
 from ..test_configuration_common import ConfigTester
-from ..test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ..test_modeling_common import ModelTesterMixin, _config_zero_init
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        UniSpeechForCTC,
-        UniSpeechForPreTraining,
-        UniSpeechForSequenceClassification,
-        UniSpeechModel,
-        Wav2Vec2FeatureExtractor,
+        Data2VecAudioForAudioFrameClassification,
+        Data2VecAudioForCTC,
+        Data2VecAudioForSequenceClassification,
+        Data2VecAudioForXVector,
+        Data2VecAudioModel,
         Wav2Vec2Processor,
     )
+    from transformers.models.data2vec.modeling_data2vec_audio import _compute_mask_indices
 
 
-class UniSpeechModelTester:
+class Data2VecAudioModelTester:
     def __init__(
         self,
         parent,
@@ -55,7 +50,6 @@ class UniSpeechModelTester:
         seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=16,
-        feat_extract_norm="group",
         feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
         conv_dim=(32, 32, 32),
@@ -66,13 +60,20 @@ class UniSpeechModelTester:
         num_conv_pos_embedding_groups=2,
         num_hidden_layers=4,
         num_attention_heads=2,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
+        hidden_dropout_prob=0.1,
         intermediate_size=20,
         layer_norm_eps=1e-5,
         hidden_act="gelu",
         initializer_range=0.02,
+        mask_time_prob=0.5,
+        mask_time_length=2,
         vocab_size=32,
-        do_stable_layer_norm=False,
+        num_adapter_layers=1,
+        adapter_stride=2,
+        tdnn_dim=(32, 32),
+        tdnn_kernel=(5, 3),
+        tdnn_dilation=(1, 2),
+        xvector_output_dim=32,
         scope=None,
     ):
         self.parent = parent
@@ -80,7 +81,6 @@ class UniSpeechModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
         self.feat_extract_dropout = feat_extract_dropout
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = conv_dim
@@ -97,14 +97,23 @@ class UniSpeechModelTester:
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
+        self.num_adapter_layers = num_adapter_layers
+        self.adapter_stride = adapter_stride
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
         self.scope = scope
+        self.tdnn_dim = tdnn_dim
+        self.tdnn_kernel = tdnn_kernel
+        self.tdnn_dilation = tdnn_dilation
+        self.xvector_output_dim = xvector_output_dim
 
         output_seq_length = self.seq_length
         for kernel, stride in zip(self.conv_kernel, self.conv_stride):
             output_seq_length = (output_seq_length - (kernel - 1)) / stride
         self.output_seq_length = int(math.ceil(output_seq_length))
         self.encoder_seq_length = self.output_seq_length
+
+        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -115,15 +124,16 @@ class UniSpeechModelTester:
         return config, input_values, attention_mask
 
     def get_config(self):
-        return UniSpeechConfig(
+        return Data2VecAudioConfig(
             hidden_size=self.hidden_size,
-            feat_extract_norm=self.feat_extract_norm,
             feat_extract_dropout=self.feat_extract_dropout,
             feat_extract_activation=self.feat_extract_activation,
             conv_dim=self.conv_dim,
             conv_stride=self.conv_stride,
             conv_kernel=self.conv_kernel,
             conv_bias=self.conv_bias,
+            mask_time_prob=self.mask_time_prob,
+            mask_time_length=self.mask_time_length,
             num_conv_pos_embeddings=self.num_conv_pos_embeddings,
             num_conv_pos_embedding_groups=self.num_conv_pos_embedding_groups,
             num_hidden_layers=self.num_hidden_layers,
@@ -134,10 +144,16 @@ class UniSpeechModelTester:
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
             vocab_size=self.vocab_size,
+            num_adapter_layers=self.num_adapter_layers,
+            adapter_stride=self.adapter_stride,
+            tdnn_dim=self.tdnn_dim,
+            tdnn_kernel=self.tdnn_kernel,
+            tdnn_dilation=self.tdnn_dilation,
+            xvector_output_dim=self.xvector_output_dim,
         )
 
     def create_and_check_model(self, config, input_values, attention_mask):
-        model = UniSpeechModel(config=config)
+        model = Data2VecAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
@@ -145,10 +161,32 @@ class UniSpeechModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
+    def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
+        config.add_adapter = True
+        model = Data2VecAudioModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+        )
+
+    def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
+        config.add_adapter = True
+        config.output_hidden_size = 8
+        model = Data2VecAudioModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+        )
+
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
-        model = UniSpeechModel(config=config)
+        model = Data2VecAudioModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -172,7 +210,7 @@ class UniSpeechModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
-        model = UniSpeechForCTC(config=config)
+        model = Data2VecAudioForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -200,7 +238,7 @@ class UniSpeechModelTester:
         self.parent.assertTrue(isinstance(mean_loss, float))
 
     def check_seq_classifier_loss(self, config, input_values, *args):
-        model = UniSpeechForSequenceClassification(config=config)
+        model = Data2VecAudioForSequenceClassification(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -226,7 +264,7 @@ class UniSpeechModelTester:
 
     def check_ctc_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = UniSpeechForCTC(config=config)
+        model = Data2VecAudioForCTC(config=config)
         model.to(torch_device)
         model.train()
 
@@ -255,7 +293,30 @@ class UniSpeechModelTester:
 
     def check_seq_classifier_training(self, config, input_values, *args):
         config.ctc_zero_infinity = True
-        model = UniSpeechForSequenceClassification(config=config)
+        model = Data2VecAudioForSequenceClassification(config=config)
+        model.to(torch_device)
+        model.train()
+
+        # freeze everything but the classification head
+        model.freeze_base_model()
+
+        input_values = input_values[:3]
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+
+        loss = model(input_values, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
+
+    def check_xvector_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
+        model = Data2VecAudioForXVector(config=config)
         model.to(torch_device)
         model.train()
 
@@ -277,7 +338,7 @@ class UniSpeechModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_values, *args):
-        model = UniSpeechForCTC(config)
+        model = Data2VecAudioForCTC(config)
         model.to(torch_device)
         model.train()
 
@@ -287,7 +348,7 @@ class UniSpeechModelTester:
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
 
-        with pytest.raises(ValueError):
+        with self.parent.assertRaises(ValueError):
             model(input_values, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
@@ -297,9 +358,15 @@ class UniSpeechModelTester:
 
 
 @require_torch
-class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
+class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (UniSpeechForCTC, UniSpeechModel, UniSpeechForSequenceClassification, UniSpeechForPreTraining)
+        (
+            Data2VecAudioForCTC,
+            Data2VecAudioModel,
+            Data2VecAudioForSequenceClassification,
+            Data2VecAudioForAudioFrameClassification,
+            Data2VecAudioForXVector,
+        )
         if is_torch_available()
         else ()
     )
@@ -308,10 +375,8 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = UniSpeechModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
-        )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechConfig, hidden_size=37)
+        self.model_tester = Data2VecAudioModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Data2VecAudioConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -320,9 +385,13 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_batched_inference(self):
+    def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_batch_inference(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_adapter(*config_and_inputs)
+
+    def test_model_with_adapter_proj_dim(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
 
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -340,11 +409,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
+    def test_xvector_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_xvector_training(*config_and_inputs)
+
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # UniSpeech has no inputs_embeds
+    # Data2VecAudio has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
@@ -352,15 +425,25 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    # UniSpeech cannot resize token embeddings
+    # Data2VecAudio cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeech has no inputs_embeds
+    # Data2VecAudio has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_flax_to_pt(self):
+        pass
+
+    @is_pt_flax_cross_test
+    # non-robust architecture does not exist in Flax
+    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -421,6 +504,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
                     "project_q.bias",
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
+                    "objective.weight",
                 ]
                 if param.requires_grad:
                     if any([x in name for x in uniform_init_parms]):
@@ -451,12 +535,12 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
             module.masked_spec_embed.data.fill_(3)
 
     def test_mask_feature_prob_ctc(self):
-        model = UniSpeechForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", mask_feature_prob=0.2, mask_feature_length=2
+        model = Data2VecAudioForCTC.from_pretrained(
+            "facebook/data2vec-audio-base-960h", mask_feature_prob=0.2, mask_feature_length=2
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", return_attention_mask=True
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
@@ -471,15 +555,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
             attention_mask=batch["attention_mask"].to(torch_device),
         ).logits
 
-        self.assertEqual(logits.shape, (4, 1498, 32))
+        self.assertEqual(logits.shape, (4, 299, 32))
 
     def test_mask_time_prob_ctc(self):
-        model = UniSpeechForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", mask_time_prob=0.2, mask_time_length=2
+        model = Data2VecAudioForCTC.from_pretrained(
+            "facebook/data2vec-audio-base-960h", mask_time_prob=0.2, mask_time_length=2
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", return_attention_mask=True
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
         )
 
         batch_duration_in_seconds = [1, 3, 2, 6]
@@ -494,34 +578,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
             attention_mask=batch["attention_mask"].to(torch_device),
         ).logits
 
-        self.assertEqual(logits.shape, (4, 1498, 32))
-
-    def test_mask_time_feature_prob_ctc_single_batch(self):
-        model = UniSpeechForCTC.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech",
-            mask_time_prob=0.2,
-            mask_feature_prob=0.2,
-            mask_time_length=2,
-            mask_feature_length=2,
-        )
-        model.to(torch_device).train()
-        processor = Wav2Vec2Processor.from_pretrained(
-            "hf-internal-testing/tiny-random-unispeech", return_attention_mask=True
-        )
-
-        batch_duration_in_seconds = [6]
-        input_features = [np.random.random(16_000 * s) for s in batch_duration_in_seconds]
-
-        batch = processor(
-            input_features, padding=True, sampling_rate=processor.feature_extractor.sampling_rate, return_tensors="pt"
-        )
-
-        logits = model(
-            input_values=batch["input_values"].to(torch_device),
-            attention_mask=batch["attention_mask"].to(torch_device),
-        ).logits
-
-        self.assertEqual(logits.shape, (1, 1498, 32))
+        self.assertEqual(logits.shape, (4, 299, 32))
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
@@ -529,14 +586,107 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = UniSpeechModel.from_pretrained("microsoft/unispeech-large-1500h-cv")
+        model = Data2VecAudioModel.from_pretrained("facebook/data2vec-audio-base")
         self.assertIsNotNone(model)
+
+
+@require_torch
+class Data2VecAudioUtilsTest(unittest.TestCase):
+    def test_compute_mask_indices(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 1
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
+
+        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
+
+    def test_compute_mask_indices_low_prob(self):
+        # with these settings num_masked_spans=0.5, which means probabilistic rounding
+        # ensures that in 5 out of 10 method calls, num_masked_spans=0, and in
+        # the other 5 out of 10, cases num_masked_spans=1
+        n_trials = 100
+        batch_size = 4
+        sequence_length = 100
+        mask_prob = 0.05
+        mask_length = 10
+
+        count_dimensions_masked = 0
+        count_dimensions_not_masked = 0
+
+        for _ in range(n_trials):
+            mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+            mask = torch.from_numpy(mask).to(torch_device)
+
+            num_masks = torch.sum(mask).item()
+
+            if num_masks > 0:
+                count_dimensions_masked += 1
+            else:
+                count_dimensions_not_masked += 1
+
+        # as we test for at least 10 masked dimension and at least
+        # 10 non-masked dimension, this test could fail with probability:
+        # P(100 coin flips, at most 9 heads) = 1.66e-18
+        self.assertGreater(count_dimensions_masked, int(n_trials * 0.1))
+        self.assertGreater(count_dimensions_not_masked, int(n_trials * 0.1))
+
+    def test_compute_mask_indices_overlap(self):
+        batch_size = 4
+        sequence_length = 80
+        mask_prob = 0.5
+        mask_length = 4
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+        mask = torch.from_numpy(mask).to(torch_device)
+
+        # because of overlap mask don't have to add up exactly to `mask_prob * sequence_length`, but have to be smaller or equal
+        for batch_sum in mask.sum(axis=-1):
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+    def test_compute_mask_indices_attn_mask_overlap(self):
+        batch_size = 4
+        sequence_length = 80
+        mask_prob = 0.5
+        mask_length = 4
+
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        attention_mask[:2, sequence_length // 2 :] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+        )
+        mask = torch.from_numpy(mask).to(torch_device)
+
+        for batch_sum in mask.sum(axis=-1):
+            self.assertTrue(int(batch_sum) <= mask_prob * sequence_length)
+
+        self.assertTrue(mask[:2, sequence_length // 2 :].sum() == 0)
+
+    def test_compute_mask_indices_short_audio(self):
+        batch_size = 4
+        sequence_length = 100
+        mask_prob = 0.05
+        mask_length = 10
+
+        attention_mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
+        # force one example to be heavily padded
+        attention_mask[0, 5:] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask, min_masks=2
+        )
+
+        # make sure that non-padded examples cannot be padded
+        self.assertFalse(mask[0][attention_mask[0].to(torch.bool).cpu()].any())
 
 
 @require_torch
 @require_soundfile
 @slow
-class UniSpeechModelIntegrationTest(unittest.TestCase):
+class Data2VecAudioModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -547,38 +697,47 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-
         ds = load_dataset("anton-l/superb_dummy", task, split="test")
 
         return ds[:num_samples]
 
-    def test_inference_pretraining(self):
-        model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
+    def test_inference_ctc_normal(self):
+        model = Data2VecAudioForCTC.from_pretrained("facebook/data2vec-audio-base-960h")
         model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/wav2vec2-large-xlsr-53")
-        input_speech = self._load_datasamples(2)
+        processor = Wav2Vec2Processor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True)
+        input_speech = self._load_datasamples(1)
 
-        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
 
         with torch.no_grad():
-            torch.manual_seed(0)
-            outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
-            )
+            logits = model(input_values).logits
 
-        # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
 
-        # pretrained model should have learned a high cosine similarity
-        self.assertTrue(cosine_sim.mean() > 0.5)
+        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
-        # fmt: off
-        expected_cosine_sim_slice = torch.tensor(
-            [[0.8290, 0.8335, 0.8815, 0.8580, 0.8249],
-             [0.8892, 0.9221, 0.8711, 0.8601, 0.8482]],
-            device=torch_device,
-        )
-        # fmt: on
+    def test_inference_ctc_batched(self):
+        model = Data2VecAudioForCTC.from_pretrained("facebook/data2vec-audio-base-960h").to(torch_device)
+        processor = Wav2Vec2Processor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2", do_lower_case=True)
 
-        self.assertTrue(torch.allclose(cosine_sim[:, :5], expected_cosine_sim_slice, atol=1e-3))
+        input_speech = self._load_datasamples(4)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+
+        with torch.no_grad():
+            logits = model(input_values).logits
+
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = processor.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with thousands of spectators were trivialities not worth thinking about",
+            "his instant of panic was followed by a small sharp blow high on his chest",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

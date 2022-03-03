@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,36 +22,67 @@ from ...file_utils import _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_data2vec": ["DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP", "Data2VecConfig", "Data2VecOnnxConfig"],
+    "configuration_data2vec_audio": [
+        "DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecAudioConfig",
+    ],
+    "configuration_data2vec_text": [
+        "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Data2VecTextConfig",
+        "Data2VecTextOnnxConfig",
+    ],
 }
 
 if is_torch_available():
-    _import_structure["modeling_data2vec"] = [
-        "DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Data2VecForCausalLM",
-        "Data2VecForMaskedLM",
-        "Data2VecForMultipleChoice",
-        "Data2VecForQuestionAnswering",
-        "Data2VecForSequenceClassification",
-        "Data2VecForTokenClassification",
-        "Data2VecModel",
-        "Data2VecPreTrainedModel",
+    _import_structure["modeling_data2vec_audio"] = [
+        "DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Data2VecAudioForAudioFrameClassification",
+        "Data2VecAudioForCTC",
+        "Data2VecAudioForSequenceClassification",
+        "Data2VecAudioForXVector",
+        "Data2VecAudioModel",
+        "Data2VecAudioPreTrainedModel",
+    ]
+    _import_structure["modeling_data2vec_text"] = [
+        "DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Data2VecTextForCausalLM",
+        "Data2VecTextForMaskedLM",
+        "Data2VecTextForMultipleChoice",
+        "Data2VecTextForQuestionAnswering",
+        "Data2VecTextForSequenceClassification",
+        "Data2VecTextForTokenClassification",
+        "Data2VecTextModel",
+        "Data2VecTextPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_data2vec import DATA2VEC_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecConfig, Data2VecOnnxConfig
+    from .configuration_data2vec_audio import DATA2VEC_AUDIO_PRETRAINED_CONFIG_ARCHIVE_MAP, Data2VecAudioConfig
+    from .configuration_data2vec_text import (
+        DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Data2VecTextConfig,
+        Data2VecTextOnnxConfig,
+    )
 
     if is_torch_available():
-        from .modeling_data2vec import (
-            DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Data2VecForCausalLM,
-            Data2VecForMaskedLM,
-            Data2VecForMultipleChoice,
-            Data2VecForQuestionAnswering,
-            Data2VecForSequenceClassification,
-            Data2VecForTokenClassification,
-            Data2VecModel,
-            Data2VecPreTrainedModel,
+        from .modeling_data2vec_audio import (
+            DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecAudioForAudioFrameClassification,
+            Data2VecAudioForCTC,
+            Data2VecAudioForSequenceClassification,
+            Data2VecAudioForXVector,
+            Data2VecAudioModel,
+            Data2VecAudioPreTrainedModel,
+        )
+        from .modeling_data2vec_text import (
+            DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Data2VecTextForCausalLM,
+            Data2VecTextForMaskedLM,
+            Data2VecTextForMultipleChoice,
+            Data2VecTextForQuestionAnswering,
+            Data2VecTextForSequenceClassification,
+            Data2VecTextForTokenClassification,
+            Data2VecTextModel,
+            Data2VecTextPreTrainedModel,
         )
 
 else:

@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch data2vec model."""
+"""PyTorch Data2VecText model."""
 
 import math
 
@@ -47,24 +46,28 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_data2vec import Data2VecConfig
+from .configuration_data2vec_text import Data2VecTextConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "data2vec"
-_CONFIG_FOR_DOC = "Data2VecConfig"
+
+_HIDDEN_STATES_START_POSITION = 2
+
+# General docstring
+_CHECKPOINT_FOR_DOC = "facebook/data2vec-text-base"
+_CONFIG_FOR_DOC = "Data2VecTextConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
-DATA2VEC_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "data2vec",
-    # See all data2vec models at https://huggingface.co/models?filter=data2vec
+
+DATA2VEC_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/data2vec-text-base",
+    # See all data2vec models at https://huggingface.co/models?filter=data2vec-text
 ]
 
 
-
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2Vec
-class Data2VecEmbeddings(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->Data2VecText
+class Data2VecTextForTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -154,8 +157,8 @@ class Data2VecEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Data2Vec
-class Data2VecSelfAttention(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->Data2VecText
+class Data2VecTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -184,7 +187,7 @@ class Data2VecSelfAttention(nn.Module):
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
+        x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
@@ -255,7 +258,7 @@ class Data2VecSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in Data2VecModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in Data2VecTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -273,7 +276,7 @@ class Data2VecSelfAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -283,7 +286,7 @@ class Data2VecSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class Data2VecSelfOutput(nn.Module):
+class Data2VecTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -297,12 +300,12 @@ class Data2VecSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2Vec
-class Data2VecAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Data2VecText
+class Data2VecTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = Data2VecSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = Data2VecSelfOutput(config)
+        self.self = Data2VecTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = Data2VecTextSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -348,7 +351,7 @@ class Data2VecAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class Data2VecIntermediate(nn.Module):
+class Data2VecTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -364,7 +367,7 @@ class Data2VecIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class Data2VecOutput(nn.Module):
+class Data2VecTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -378,21 +381,21 @@ class Data2VecOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Data2Vec
-class Data2VecLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Data2VecText
+class Data2VecTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = Data2VecAttention(config)
+        self.attention = Data2VecTextAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = Data2VecAttention(config, position_embedding_type="absolute")
-        self.intermediate = Data2VecIntermediate(config)
-        self.output = Data2VecOutput(config)
+            self.crossattention = Data2VecTextAttention(config, position_embedding_type="absolute")
+        self.intermediate = Data2VecTextIntermediate(config)
+        self.output = Data2VecTextOutput(config)
 
     def forward(
         self,
@@ -464,12 +467,12 @@ class Data2VecLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2Vec
-class Data2VecEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Data2VecText
+class Data2VecTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Data2VecLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Data2VecTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -563,7 +566,7 @@ class Data2VecEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class Data2VecPooler(nn.Module):
+class Data2VecTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -578,18 +581,16 @@ class Data2VecPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->Data2Vec,roberta->data2vec
-class Data2VecPreTrainedModel(PreTrainedModel):
+class Data2VecTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = Data2VecConfig
-    base_model_prefix = "data2vec"
+    config_class = Data2VecTextConfig
+    base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -603,11 +604,13 @@ class Data2VecPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            if hasattr(module, "bias") and module.bias is not None:
+                module.bias.data.zero_()
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Data2VecEncoder):
+        if isinstance(module, Data2VecTextEncoder):
             module.gradient_checkpointing = value
 
     def update_keys_to_ignore(self, config, del_keys_to_ignore):
@@ -620,7 +623,10 @@ class Data2VecPreTrainedModel(PreTrainedModel):
             ]
 
 
-DATA2VEC_START_DOCSTRING = r"""
+DATA2VECTEXT_START_DOCSTRING = r"""
+    Data2VecText was proposed in [data2vec: A General Framework for Self-supervised Learning in Speech, Vision and
+    Language](https://arxiv.org/pdf/2202.03555) by Alexei Baevski, Wei-Ning Hsu, Qiantong Xu, Arun Babu, Jiatao Gu and
+    Michael Auli.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -631,12 +637,12 @@ DATA2VEC_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`Data2VecConfig`]): Model configuration class with all the parameters of the
+        config ([`Data2VecTextConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-DATA2VEC_INPUTS_DOCSTRING = r"""
+DATA2VECTEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -687,11 +693,10 @@ DATA2VEC_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare data2vec Model transformer outputting raw hidden-states without any specific head on top.",
-    DATA2VEC_START_DOCSTRING,
+    "The bare Data2VecText Model for text transformer outputting raw hidden-states without any specific head on top.",
+    DATA2VECTEXT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->DATA2VEC,Roberta->Data2Vec
-class Data2VecModel(Data2VecPreTrainedModel):
+class Data2VecTextModel(Data2VecTextPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -709,15 +714,14 @@ class Data2VecModel(Data2VecPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Data2Vec
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = Data2VecEmbeddings(config)
-        self.encoder = Data2VecEncoder(config)
+        self.embeddings = Data2VecTextForTextEmbeddings(config)
+        self.encoder = Data2VecTextEncoder(config)
 
-        self.pooler = Data2VecPooler(config) if add_pooling_layer else None
+        self.pooler = Data2VecTextPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -736,7 +740,7 @@ class Data2VecModel(Data2VecPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -875,10 +879,9 @@ class Data2VecModel(Data2VecPreTrainedModel):
 
 
 @add_start_docstrings(
-    """data2vec Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VEC_START_DOCSTRING
+    """Data2VecText Model with a `language modeling` head on top for CLM fine-tuning.""", DATA2VECTEXT_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec,roberta-base->data2vec
-class Data2VecForCausalLM(Data2VecPreTrainedModel):
+class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -887,10 +890,10 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `Data2VecLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `Data2VecTextLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
-        self.lm_head = Data2VecLMHead(config)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
+        self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -904,7 +907,7 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -953,13 +956,13 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Data2VecTokenizer, Data2VecForCausalLM, Data2VecConfig
+        >>> from transformers import Data2VecTextTokenizer, Data2VecTextForCausalLM, Data2VecTextConfig
         >>> import torch
 
-        >>> tokenizer = Data2VecTokenizer.from_pretrained("data2vec-base")
-        >>> config = Data2VecConfig.from_pretrained("data2vec-base")
+        >>> tokenizer = Data2VecTextTokenizer.from_pretrained("facebook/data2vec-text-base")
+        >>> config = Data2VecTextConfig.from_pretrained("data2vec-base")
         >>> config.is_decoder = True
-        >>> model = Data2VecForCausalLM.from_pretrained("data2vec-base", config=config)
+        >>> model = Data2VecTextForCausalLM.from_pretrained("data2vec-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -970,7 +973,7 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1029,9 +1032,8 @@ class Data2VecForCausalLM(Data2VecPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VEC_START_DOCSTRING)
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
-class Data2VecForMaskedLM(Data2VecPreTrainedModel):
+@add_start_docstrings("""data2vec Model with a `language modeling` head on top.""", DATA2VECTEXT_START_DOCSTRING)
+class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1041,12 +1043,12 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `Data2VecForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `Data2VecTextForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
-        self.lm_head = Data2VecLMHead(config)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
+        self.lm_head = Data2VecTextLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1060,7 +1062,7 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1093,7 +1095,7 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1126,9 +1128,9 @@ class Data2VecForMaskedLM(Data2VecPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Data2Vec
-class Data2VecLMHead(nn.Module):
-    """Data2Vec Head for masked language modeling."""
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead with Roberta->Data2VecText
+class Data2VecTextLMHead(nn.Module):
+    """Data2VecText Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1156,13 +1158,12 @@ class Data2VecLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    data2vec Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    Data2VecText Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
-class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
+class Data2VecTextForSequenceClassification(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1170,13 +1171,13 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
-        self.classifier = Data2VecClassificationHead(config)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
+        self.classifier = Data2VecTextClassificationHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1204,7 +1205,7 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1255,19 +1256,18 @@ class Data2VecForSequenceClassification(Data2VecPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    Data2VecText Model with a multiple choice classification head on top (a linear layer on top of the pooled output
+    and a softmax) e.g. for RocStories/SWAG tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
-class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
+class Data2VecTextForMultipleChoice(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.data2vec = Data2VecModel(config)
+        self.data2vec_text = Data2VecTextModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1275,7 +1275,7 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(
-        DATA2VEC_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+        DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -1315,7 +1315,7 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
             else None
         )
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1351,13 +1351,12 @@ class Data2VecForMultipleChoice(Data2VecPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    Data2VecText Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
-class Data2VecForTokenClassification(Data2VecPreTrainedModel):
+class Data2VecTextForTokenClassification(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1365,7 +1364,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1375,7 +1374,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1401,7 +1400,7 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1435,8 +1434,8 @@ class Data2VecForTokenClassification(Data2VecPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Data2Vec
-class Data2VecClassificationHead(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead with Roberta->Data2VecText
+class Data2VecTextClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1460,13 +1459,12 @@ class Data2VecClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Data2Vec Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    Data2VecText Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    DATA2VEC_START_DOCSTRING,
+    DATA2VECTEXT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with ROBERTA->DATA2VEC,Roberta->Data2Vec,roberta->data2vec
-class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
+class Data2VecTextForQuestionAnswering(Data2VecTextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1474,13 +1472,13 @@ class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.data2vec = Data2VecModel(config, add_pooling_layer=False)
+        self.data2vec_text = Data2VecTextModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DATA2VEC_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DATA2VECTEXT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1513,7 +1511,7 @@ class Data2VecForQuestionAnswering(Data2VecPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec(
+        outputs = self.data2vec_text(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
